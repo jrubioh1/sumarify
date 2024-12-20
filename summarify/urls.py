@@ -16,7 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from summarifyApp import views
+
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('directory_tree/', views.directory_tree)
 ]

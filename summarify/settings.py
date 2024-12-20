@@ -25,8 +25,8 @@ SECRET_KEY = 'CAMBIAME-CAMBIAME'
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = [ "http://localhost:3000","http://127.0.0.1:3000",]
-CORS_ALLOWED_ORIGINS = ["http://localhost:3000","http://127.0.0.1:3000"] # "https://example.com"
+ALLOWED_HOSTS = [ "localhost","127.0.0.1",]
+CORS_ALLOWED_ORIGINS = ["http://localhost","http://127.0.0.1"] # "https://example.com"
 
 # Application definition
 
