@@ -36,11 +36,9 @@ def directory_tree(request):
         # Agrega archivos 
         current_level['files'] = []
         for file_name in files:
+            
+            
              current_level['files'].append(file_name)
             
-           
-            
-    print (tree)
 
-        
     return Response({'message':'The procces is success.', 'path':request.PATH ,'result': tree},200)
