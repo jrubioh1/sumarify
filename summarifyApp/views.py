@@ -1,6 +1,9 @@
 import os
 import charset_normalizer
 import PyPDF2
+import pytesseract
+from PIL import Image
+from pdf2image import convert_from_bytes
 from io import BytesIO
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -49,9 +52,11 @@ def directory_tree(request):
     return Response({'message':'The procces is success.', 'path':request.PATH ,'result': tree},200)
 
 
+
 @api_view(['POST'])
 def get_file_content(request):
-    def process_pdf(file_data):
+    print(os.environ["PATH"])
+    def process_pdf_with_tesseract(file_data):
         file_info = {
             'file_format': 'pdf',
             'is_encrypted': False,
@@ -60,40 +65,35 @@ def get_file_content(request):
         }
 
         try:
-            pdf_stream = BytesIO(file_data)
-            pdf_reader = PyPDF2.PdfReader(pdf_stream)
-            if pdf_reader.is_encrypted:
-                file_info['is_encrypted'] = True
-                file_info['content'] = "PDF is encrypted, unable to extract content."
-            else:
-                content = ""
-                for page in pdf_reader.pages:
-                    content += page.extract_text()
-                file_info['content'] = content.strip()
-                file_info['is_normalized'] = bool(content.strip())
+            # Convertimos el PDF en imágenes por página
+            images = convert_from_bytes(file_data)
+            content = ""
+            for image in images:
+                # Aplicamos Tesseract OCR a cada imagen
+                text = pytesseract.image_to_string(image, lang='eng')  # Cambiar 'eng' por el idioma necesario
+                content += text + "\n"
+            file_info['content'] = content.strip()
+            file_info['is_normalized'] = bool(content.strip())
         except Exception as e:
-            file_info['content'] = f"Error processing PDF: {str(e)}"
+            file_info['content'] = f"Error processing PDF with Tesseract: {str(e)}"
 
         return file_info
 
-    def process_text_file(file_data):
+    def process_image_with_tesseract(file_data):
         file_info = {
-            'file_format': 'text',
-            'is_encrypted': False,
+            'file_format': 'image',
             'content': None,
             'is_normalized': False
         }
 
         try:
-            result = charset_normalizer.detect(file_data)
-            encoding = result['encoding']
-            if encoding:
-                file_info['content'] = file_data.decode(encoding, errors='replace')
-                file_info['is_normalized'] = True
-            else:
-                file_info['content'] = "Unable to detect encoding or non-text content."
+            # Convertimos la imagen a texto con Tesseract
+            image = Image.open(BytesIO(file_data))
+            text = pytesseract.image_to_string(image, lang='eng')  # Cambiar 'eng' por el idioma necesario
+            file_info['content'] = text.strip()
+            file_info['is_normalized'] = bool(text.strip())
         except Exception as e:
-            file_info['content'] = f"Error processing text file: {str(e)}"
+            file_info['content'] = f"Error processing image with Tesseract: {str(e)}"
 
         return file_info
 
@@ -107,11 +107,15 @@ def get_file_content(request):
         file_info = {}
 
         if file_name.endswith('.pdf'):
-            file_info = process_pdf(raw_data)
+            file_info = process_pdf_with_tesseract(raw_data)
+        elif file_name.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff')):
+            file_info = process_image_with_tesseract(raw_data)
         else:
-            file_info = process_text_file(raw_data)
+            file_info['content'] = "Unsupported file type. Please upload a PDF or an image file."
+            file_info['file_format'] = "unknown"
+            file_info['is_normalized'] = False
 
-        # Añadir el nombre del archivo al resultado
+        # Añadimos el nombre del archivo al resultado
         file_info['file_name'] = file_name
         return Response(file_info, status=200)
 
