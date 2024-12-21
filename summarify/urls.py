@@ -22,5 +22,6 @@ from summarifyApp import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('directory_tree/', views.directory_tree),
+    path('directory_tree_from_zip/', views.directory_tree_from_zip),
     path('get_file_content/', views.get_file_content)
 ]

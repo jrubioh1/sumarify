@@ -1,13 +1,10 @@
 import os
-import charset_normalizer
-import PyPDF2
-import pytesseract
-from PIL import Image
-from pdf2image import convert_from_bytes
-from io import BytesIO
+import zipfile
+import tempfile
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from request_casting import request_casting
+from summarifyApp.helpers import process_pdf_with_tesseract, process_image_with_tesseract, clean_directory_tree
 
 
 
@@ -53,49 +50,54 @@ def directory_tree(request):
 
 
 
+# Vista de Django para procesar el ZIP y devolver un árbol limpio
+@api_view(['POST'])
+def directory_tree_from_zip(request):
+    uploaded_file = request.data.get('file', None)
+    if not uploaded_file:
+        return Response({'error': 'The ZIP file has not been specified.'}, status=400)
+
+    if not uploaded_file.name.lower().endswith('.zip'):
+        return Response({'error': 'The provided file is not a ZIP archive.'}, status=400)
+
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            zip_path = os.path.join(temp_dir, uploaded_file.name)
+            with open(zip_path, 'wb') as f:
+                f.write(uploaded_file.read())
+
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                valid_files = [
+                    file for file in zip_ref.namelist()
+                    if not file.startswith("__MACOSX") and not file.startswith("._")
+                ]
+                zip_ref.extractall(temp_dir, members=valid_files)
+
+            tree = {}
+            for root, dirs, files in os.walk(temp_dir):
+                current_level = tree
+                for part in root[len(temp_dir):].strip(os.sep).split(os.sep):
+                    if part:
+                        current_level = current_level.setdefault(part, {})
+                for dir_name in dirs:
+                    current_level[dir_name] = {}
+                filtered_files = [file for file in files if file != uploaded_file.name]
+                if filtered_files:
+                    current_level['files'] = [file.encode('utf-8').decode('utf-8') for file in filtered_files]
+
+            cleaned_tree = clean_directory_tree(tree)
+
+            return Response({
+                'message': 'The process was successful.',
+                'zip_file': uploaded_file.name,
+                'result': cleaned_tree
+            }, status=200)
+
+    except Exception as e:
+        return Response({'error': f"Error processing the ZIP file: {str(e)}"}, status=500)
+    
 @api_view(['POST'])
 def get_file_content(request):
-    print(os.environ["PATH"])
-    def process_pdf_with_tesseract(file_data):
-        file_info = {
-            'file_format': 'pdf',
-            'is_encrypted': False,
-            'content': None,
-            'is_normalized': False
-        }
-
-        try:
-            # Convertimos el PDF en imágenes por página
-            images = convert_from_bytes(file_data)
-            content = ""
-            for image in images:
-                # Aplicamos Tesseract OCR a cada imagen
-                text = pytesseract.image_to_string(image, lang='eng')  # Cambiar 'eng' por el idioma necesario
-                content += text + "\n"
-            file_info['content'] = content.strip()
-            file_info['is_normalized'] = bool(content.strip())
-        except Exception as e:
-            file_info['content'] = f"Error processing PDF with Tesseract: {str(e)}"
-
-        return file_info
-
-    def process_image_with_tesseract(file_data):
-        file_info = {
-            'file_format': 'image',
-            'content': None,
-            'is_normalized': False
-        }
-
-        try:
-            # Convertimos la imagen a texto con Tesseract
-            image = Image.open(BytesIO(file_data))
-            text = pytesseract.image_to_string(image, lang='eng')  # Cambiar 'eng' por el idioma necesario
-            file_info['content'] = text.strip()
-            file_info['is_normalized'] = bool(text.strip())
-        except Exception as e:
-            file_info['content'] = f"Error processing image with Tesseract: {str(e)}"
-
-        return file_info
 
     uploaded_file = request.data.get('file', None)
     if not uploaded_file:
